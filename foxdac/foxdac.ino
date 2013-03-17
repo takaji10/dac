@@ -30,6 +30,7 @@ struct location
 #define hold_time 1500  // Time in milliseconds to access main menu from top screen
 unsigned long debounceMillis = 0;  // Stores last recorded time for switch debounce interval
 boolean button_already_pressed = false;
+boolean in_menu = false;
 
 /* Rotary encoder handler for arduino.
  *
@@ -106,6 +107,7 @@ static const int pin_oled_mosi = 51;
 static const int pin_oled_cs = 53;
 static const int pin_oled_a0 = 9;
 
+
 static const struct location menu_splash_loc = {u8g_font_fub30, 40, 50};
 static const double menu_splash_secs = 1.0;
 static const char menu_splash_text[] = "FOXDAC";
@@ -136,12 +138,16 @@ void screen_print(const struct location *loc, char *str)
   screen.drawStr(loc->x, loc->y, str);
 }
 
+#define MENU_ITEMS 4
+char *menu_strings[MENU_ITEMS] = { "Item 1", "Item 2", "Item 3", "Item 4" };
+int menu_current = 0;
 /******************************************************************************
  * Top-Level Functions
  ******************************************************************************/
 
 void setup()
 {
+  
   rotary_init();
   
   pinMode(SELECTPIN, INPUT);      // Button switch or pin for encoder built-in switch 
@@ -154,26 +160,14 @@ void setup()
 
   delay(menu_splash_secs * 1000);
 
-  draw(volume_default);
+  draw_volume(volume_default);
 }
 
 void loop()
 {  
-  char result = rotary_process();
-  
-  if (result == 0x40 && volume_current < volume_min)
-  {
-    volume_current+=2;
-    draw(volume_current);
-  }
-  else if (result == -0x80 && volume_current > volume_max)
-  {
-    volume_current-=2;
-    draw(volume_current);
-  }
-
-  if (digitalRead(SELECTPIN) == LOW && button_already_pressed == false)
-  {
+ char result = rotary_process();
+ if (digitalRead(SELECTPIN) == LOW && button_already_pressed == false)
+ {
     debounceMillis = millis();
     button_already_pressed = true;
   }
@@ -182,20 +176,34 @@ void loop()
     button_already_pressed = false;
   }
   
-  if (button_already_pressed && millis() - debounceMillis > hold_time)
+  if (button_already_pressed && millis() - debounceMillis > hold_time) //press and hold
   {
-    draw(volume_default);
+      debounceMillis = millis();
+      in_menu = !in_menu; //If we're in the menu, exit it. Otherwise, go in the menu
+      if (in_menu)
+        draw_menu(); 
+      else
+        draw_volume(volume_current);
+  }
+  
+  if (in_menu)
+  {
+      update_menu(result); // TODO: This will fail because we don't have the result
+  }
+  else
+  {
+      volume_control(result);
   }
   
 }
 
-void draw(byte volume_current)
+void draw_volume(byte volume_current)
 {
   char volume[4];
   snprintf(volume, sizeof(volume), "%d", volume_current/-2);
   
   // Draw the main screen.
-  screen.firstPage();
+  screen.firstPage(); // This marks the beginning of all drawing
   do {
     screen_print(&menu_input_source_loc, "SPDIF");
     screen_print(&menu_sample_rate_loc, "44,100 Hz");
@@ -204,6 +212,61 @@ void draw(byte volume_current)
     screen.drawStr(menu_vol_loc.x + menu_vol_width, menu_vol_loc.y, volume);
 
     screen_print(&menu_db_loc, "dB");
+  } while(screen.nextPage()); // This marks the end of all drawing in the draw loop
+}
+
+void draw_menu(void) { //Everything here is being drawn outside the loop
+  uint8_t i, h;
+  u8g_uint_t w, d;
+  
+  screen.firstPage();
+  do {
+    screen.setFont(u8g_font_6x13);
+    screen.setFontRefHeightText();
+    screen.setFontPosTop();
+    h = screen.getFontAscent()-screen.getFontDescent();
+    w = screen.getWidth();
+    for( i = 0; i < MENU_ITEMS; i++ ) {        // draw all menu items
+      d = (w-screen.getStrWidth(menu_strings[i]))/2;
+      screen.setDefaultForegroundColor();
+      if ( i == menu_current ) {               // current selected menu item
+        screen.drawBox(0, i*h+1, w, h);     // draw cursor bar
+        screen.setDefaultBackgroundColor();
+      }
+      screen.drawStr(d, i*h, menu_strings[i]);
+    }
   } while(screen.nextPage());
+}
+
+void update_menu(char result)
+{
+ if (result == 0x40 && volume_current < volume_min) {
+      menu_current++;
+      if ( menu_current >= MENU_ITEMS )
+        menu_current = 0;
+      draw_menu();
+ }
+ else if (result == -0x80 && volume_current > volume_max) {
+      if ( menu_current == 0 )
+        menu_current = MENU_ITEMS;
+      menu_current--;
+      draw_menu();
+ }
+}
+
+void volume_control(char result)
+{
+  //char result = rotary_process(); TODO: Delete this line
+  
+  if (result == 0x40 && volume_current < volume_min)
+  {
+    volume_current+=2;
+    draw_volume(volume_current);
+  }
+  else if (result == -0x80 && volume_current > volume_max)
+  {
+    volume_current-=2;
+    draw_volume(volume_current);
+  }
 }
 
