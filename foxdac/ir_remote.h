@@ -1,7 +1,7 @@
 #ifndef _IR_REMOTE_H
 #define _IR_REMOTE_H
 
-#define REMOTEPIN 3
+#define REMOTEPIN 7
 
 #define remote_menu	0x77EC007C
 #define remote_enter	0x77E1??7C, 0x77E1??7C

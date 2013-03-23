@@ -1,7 +1,3 @@
-#include <stdint.h>
-
-#include <Arduino.h>
-
 #include "ir_remote.h"
 
 int getIRkey()
